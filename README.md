@@ -5,12 +5,42 @@ Augment AI Rules and Guidelines for WordPress Plugin Development
 
 ---
 type: "always_apply"
-description: "Example description"
+description: "VS Code Development for WordPress Plugins"
 ---
 
 # Augment AI Rules & User Guidelines – VS Code Development for WordPress Plugins
 
 This document defines standards, workflows, and guidelines for WordPress plugin development using React for admin UI, PHP for backend, and mySQL for database. It enforces consistency, maintainability, security, and professionalism in Augment AI projects. Guidelines fit VS Code workflows.
+
+---
+
+## Application Architecture
+
+RULE: Decoupled Server-Client Model with WordPress Plugin Server and PWA Client
+
+The application server operates as a WordPress plugin installed on a standard WordPress host, handling backend logic, mySQL interactions, and exposing APIs via WP REST API extensions. The client is a Progressive Web App (PWA) built with React, which connects to the WordPress host over HTTPS for data fetching, updates, and authentication. This architecture promotes separation of concerns, enables offline functionality, and supports seamless installation on user devices. Specific: Ensure plugin exposes all necessary endpoints under /wp-json/augment/v1/; PWA must register service worker on load. General: Audit API compatibility quarterly; document connection flows in README; test PWA install prompts across browsers.
+
+#### Key Principles
+- Server as Plugin: Leverage WP core for authentication (JWT or WP sessions), scheduling (WP cron), and security (nonces). Prefix all custom tables, hooks, and endpoints with 'augment_'; migrate schemas on plugin activation; handle WP updates gracefully with version checks.
+- Client as PWA: Use React for UI, Workbox for service workers, and IndexedDB for local storage. Manifest.json defines app metadata; support add-to-homescreen; offline-first design with sync queues. Connect via fetch to WP REST; use WP API client libraries like @wordpress/api-fetch.
+- Connection Mechanism: Secure HTTPS only; OAuth2 or WP application passwords for auth; retry logic on network failures; heartbeat pings for session validity; compress payloads with GZIP.
+- Avoid: Tight coupling like embedding WP scripts in PWA; direct mySQL access from client; unversioned APIs; ignoring PWA lighthouse scores.
+- Benefits: Offline access reduces latency; PWA install boosts engagement; plugin modularity eases WP theme/plugin conflicts; scalable to multiple WP hosts.
+- Add: Implement webhook endpoints in plugin for push updates to PWA; use Push API for notifications; cache API responses in service worker; sync data on reconnect with conflict resolution.
+
+GUIDELINE: Offline-First Data Synchronization. Queue mutations in IndexedDB during offline; sync on reconnect via WP REST POST/PUT; resolve conflicts with last-write-wins or server-authoritative; log sync states; test with Chrome DevTools network throttling.
+
+- Plugin Server Layer: Extend WP REST controllers for custom routes; validate requests with WP capabilities; sanitize inputs server-side; log API calls with user context; rate-limit endpoints per IP/user.
+- PWA Client Layer: Register service worker for caching strategies (stale-while-revalidate for reads, network-first for writes); handle install/activate events; prompt for permissions (notifications, storage); lazy-load components for initial load speed.
+- Integration Layer: Use WP nonces in API calls from PWA; refresh tokens automatically; fallback to cached data on 5xx errors; monitor connection with navigator.onLine and beacon API for unsent analytics.
+- Security Layer: Enforce CORS headers in plugin (allow PWA origin only); validate origins in AJAX; encrypt sensitive local data; audit PWA for XSS via DOMPurify.
+- Performance Layer: Pre-cache critical assets in service worker; optimize WP API responses with fields param; use React Query for client-side caching; aim for PWA score >90 on Lighthouse.
+
+ENFORCE: Validate architecture in CI: Run WP-CLI to test plugin endpoints; simulate PWA offline with Puppeteer; fail build if sync fails >5%; document API schema in OpenAPI. Specific: PRs must include PWA connection tests. General: Train on PWA debugging; architecture diagram in repo with draw.io.
+
+VS Code: Use Live Server extension for PWA preview; Lighthouse panel for audits; WP-CLI tasks for server sim; Network tab for connection traces; service worker debugger.
+
+RULE: Progressive Enhancement for PWA Features. Ensure core functionality works without PWA traits (e.g., as SPA); add offline/install progressively; test graceful degradation; support legacy browsers via polyfills; measure adoption metrics.
 
 ---
 
@@ -20,25 +50,29 @@ This document defines standards, workflows, and guidelines for WordPress plugin 
 
 RULE: Follow Layered Architecture with Separation of Concerns
 
-Structure plugins for modularity and reusability. Each layer has defined responsibilities. Follow SOLID principles for WordPress hooks, actions, filters, and React components. Specific: Limit layers to 3-5 per plugin. General: Review layers quarterly; document layer map.
+Structure plugins modularly for reusability. Layers have defined roles. Apply SOLID to WP hooks, actions, filters, React components. Limit: 3-5 layers/plugin. Review layers quarterly; doc layer map.
 
 #### Key Principles
-- Modularity: Use independent modules for development. Separate PHP services from React components and mySQL access; prefix modules with plugin name; limit module size to 500 lines; use subfolders for large modules.
-- Dependency Management: Use WP patterns or Composer for PHP. Enqueue React scripts with wp_enqueue_script; declare dependencies in enqueue; version scripts; load conditional on user role.
-- Avoid: Coupling to WP globals without abstraction, god classes, circular dependencies; no direct $post access; no hardcode paths; no static calls across layers.
-- Benefits: Improves readability, debugging, WP multisite support; enables theme compatibility; supports updates; reduces load time.
-- Add: Use namespaces for PHP classes to avoid conflicts; register React scripts in admin only when needed; conditional enqueue on page; dequeue on uninstall; lazy load services.
+- Modularity: Independent modules. Separate PHP services, React components, mySQL; prefix with plugin name; <=500 lines/module; subfolders for large.
+- Dependency Management: WP patterns/Composer for PHP. Enqueue React via wp_enqueue_script; declare deps; version scripts; conditional load by role.
+- Avoid: WP global coupling sans abstraction, god classes, circular deps; no direct $post; no hardcoded paths; no cross-layer statics.
+- Benefits: Boosts readability, debugging, multisite; theme compat; updates; load time.
+- Add: Namespace PHP classes; admin-only React scripts; conditional enqueue; dequeue on uninstall; lazy-load services.
 
-- Data/Logic Layer: Handle business logic, validation, mySQL via $wpdb. Use DDD entities and repositories; index mySQL tables for queries; use custom tables prefixed; backup tables on activate; migrate on update.
-- Presentation Layer: Use React for admin, PHP templates for public. Use hooks or Redux for state; enqueue styles separately from scripts; use CSS modules in React; minify CSS; optimize images.
-- Control Layer: Use WP hooks, AJAX handlers. Add nonces, validate requests, log points; use add_action for entry, do_action for exit; priority on hooks; remove on deactivate; schedule cron if needed.
-- Services: PHP classes for external calls. Keep stateless, use transients, version for WP; cache API responses in options; timeout on calls; retry logic; validate responses.
-- Utilities: Pure functions for tasks like sanitization; test utilities without WP load; export for reuse; inline if small; memoize if pure.
-- Types/Interfaces: PHP interfaces for hooks, TS for React. Use contracts, generics, runtime validation; type hint all PHP params; PropTypes in React; default props; validate interfaces.
+GUIDELINE: Event-Driven for Loose Coupling. WP actions/filters as events; React custom events via EventEmitter; subscribe in control layer; avoid direct calls; log flows.
 
-ENFORCE: Keep layer boundaries. Delegate queries to services. Use PHPCS for checks; custom sniffs for layers; fail build on violate. Specific: Audit boundaries per PR; log violations. General: Train team on SOLID; layer diagram in repo.
+- Data/Logic Layer: Business logic, validation, mySQL via $wpdb. DDD entities/repos; index tables; prefixed custom tables; backup on activate; migrate on update.
+- Presentation Layer: React admin, PHP public templates. Hooks/Redux state; separate style enqueues; React CSS modules; minify CSS; optimize images.
+- Control Layer: WP hooks, AJAX. Nonces, validate reqs, log; add_action entry, do_action exit; hook priorities; remove on deactivate; cron if needed.
+- Services: Stateless PHP for externals. Transients, WP-versioned; cache API in options; timeouts; retries; validate resp.
+- Utilities: Pure funcs for sanitization etc.; test sans WP; export/reuse; inline small; memoize pure.
+- Types/Interfaces: PHP interfaces for hooks, TS for React. Contracts, generics, runtime val; type-hint PHP params; React PropTypes; defaults; validate.
 
-VS Code: Use Outline (Ctrl+Shift+O) for navigation. Error Lens for warnings. Dependency Cruiser for rules; set up snippets for WP hooks; graph view for deps; hover docs; color layers.
+ENFORCE: Maintain boundaries; delegate queries to services. PHPCS checks, custom layer sniffs; build fail on violation. Audit/PR; log violations. Train SOLID; repo layer diagram.
+
+VS Code: Outline (Ctrl+Shift+O) nav. Error Lens warnings. Dep Cruiser rules; WP hook snippets; dep graph; hover docs; layer colors. Madge for circ deps; tasks.json scans.
+
+RULE: Micro-Frontends for React Scalability. Break admin into feature React apps; dynamic imports; share core utils only; version each; isolate tests.
 
 ---
 
@@ -46,17 +80,21 @@ VS Code: Use Outline (Ctrl+Shift+O) for navigation. Error Lens for warnings. Dep
 
 RULE: Consistent Naming Patterns
 
-Use names that show intent. Specific: Review names in code review. General: Document conventions in README; lint names; update yearly.
+Intent-showing names. Review in CR. Doc in README; lint names; yearly update.
 
-- Services: camelCaseService.php in /includes/services/; prefix with plugin slug; abstract suffix if needed; singleton if global; doc purpose.
-- Components/UI: PascalCase.jsx in /admin/js/components/; snake_case.php in /admin/partials/; group by feature folder; index file for exports; story for components; test file adjacent.
-- Utilities: camelCase.php/js in /includes/utils/; one function per file if complex; barrel exports JS; type file alongside; version if public.
-- Models/Types: PascalCase.php/ts in /includes/models/; separate interfaces from classes; DTO pattern; validate models; schema file.
-- Tests: .test.php/jsx mirroring source in /tests/; add coverage per file; setup file shared.
+- Services: camelCaseService.php /includes/services/; slug prefix; abstract suffix if; singleton global; doc purpose.
+- Components/UI: PascalCase.jsx /admin/js/components/; snake_case.php /admin/partials/; feature folders; index exports; stories; adjacent tests.
+- Utilities: camelCase.php/js /includes/utils/; 1 func/file complex; JS barrel exports; types alongside; version public.
+- Models/Types: PascalCase.php/ts /includes/models/; sep interfaces/classes; DTOs; validate; schema file.
+- Tests: .test.php/jsx mirror src /tests/; per-file cov; shared setup.
 
-ENFORCE: No generic names. Follow WP structure: /includes/, /admin/, /public/, /assets/, /languages/; /templates/ for views; /build/ for minified; /migrations/ for DB. Specific: Structure check in CI. General: Folder permissions; archive old.
+GUIDELINE: Standardize Config/Log Files. plugin-slug-config.php /includes/config/; plugin-slug-logs.sql /logs/; timestamps in logs; .json API configs.
 
-VS Code: Compact Folders. Ctrl+P search. Prettier/ESLint/PHPCS on save; use search for hook names; exclude node_modules; glob patterns; file icons.
+ENFORCE: No generics. WP struct: /includes/, /admin/, /public/, /assets/, /languages/; /templates/ views; /build/ minified; /migrations/ DB. CI struct check. Folder perms; archive old.
+
+VS Code: Compact Folders. Ctrl+P search. Prettier/ESLint/PHPCS save; hook search; exclude node_modules; globs; icons. File Nesting for grouping.
+
+RULE: Assets by Type/Version. /assets/ sub: /css/, /js/, /images/; version hashes in names; /src/ unminified.
 
 ---
 
@@ -64,49 +102,55 @@ VS Code: Compact Folders. Ctrl+P search. Prettier/ESLint/PHPCS on save; use sear
 
 RULE: Strict Configurations
 
-Use strict typing and validation. Specific: Enforce in CI. General: Audit compliance monthly; train on standards.
+Strict typing/validation. CI enforce. Monthly audit; standards train.
 
-- Type-check: declare(strict_types=1) in PHP, strict TS, prepared $wpdb; check WP capabilities in functions; use ? for nullable; enum for statuses; strict mode JS.
-- Declare returns: In PHP/TS; use union types for WP errors; void for no return; mixed only last resort; annotate all.
-- No untyped: Avoid mixed, raw queries; escape all outputs; no var_dump; no die; no eval.
-- Error handling: Try-catch with WP_Error; log with error_log; custom exceptions; throw early; rethrow if needed.
-- Validate: WP sanitize, Zod for props; check nonces in AJAX; rate limit inputs; CSRF tokens; schema validate.
+- Type-check: PHP declare(strict_types=1), strict TS, prepared $wpdb; WP cap checks; ? nullable; enums statuses; JS strict.
+- Declare returns: PHP/TS; WP error unions; void no-ret; mixed last; annotate all.
+- No untyped: Avoid mixed/raw queries; escape outputs; no var_dump/die/eval.
+- Error handling: Try-catch WP_Error; error_log; custom exc; throw early; rethrow if.
+- Validate: WP sanitize, Zod props; AJAX nonces; rate-limit inputs; CSRF; schema val.
+
+GUIDELINE: Functional Paradigms. Pure utils funcs; array map/filter/reduce; no side-effects React hooks; compose complex; test composable.
 
 #### PHP/WP Style Rules
 
-Variables: camelCase, const preferred, no globals except WP; prefix locals if needed; $this_ for class; underscore private; init in constructor.
+Variables: camelCase, const pref, no globals but WP; local prefix if; $this_ class; _ private; ctor init.
 
-Functions: Closures for hooks, destructure params, 20-30 lines, private props, pure, immutable args; return early on fails; single responsibility; named args PHP8; doc params.
+Functions: Hook closures, destructure params, 20-30 lines, private props, pure, immutable args; early returns fails; SRP; PHP8 named args; doc params.
 
-Strings: Double for interp, single literals, esc_html output; use __() for translatable; plural gettext; sprintf format; concat with .
+Strings: Double interp, single literals, esc_html out; __() trans; plural gettext; sprintf; . concat.
 
-Conditionals: ===, early returns, capability checks; if WP_DEBUG add checks; switch for roles; ternary simple; match PHP8.
+Conditionals: ===, early ret, cap checks; WP_DEBUG checks; role switch; simple ternary; PHP8 match.
 
-Async: WP AJAX hooks, try-catch, wp_send_json_error, AbortController in JS; limit concurrent requests; poll for long tasks; web worker if heavy; promise chain.
+Async: WP AJAX hooks, try-catch, wp_send_json_error, JS AbortController; limit concurrent; poll long; web workers heavy; promise chains.
 
-Modules: Composer autoload, group imports, spread over .apply; require once for files; conditional load; lazy load; dynamic require if rare.
+Modules: Composer autoload, grouped imports, .apply spread; require_once; conditional/lazy load; rare dynamic.
 
-Safety: wp_verify_nonce, esc_attr, ?? for defaults; filter inputs with apply_filters; validate emails; URL check; IP validate.
+Safety: wp_verify_nonce, esc_attr, ?? defaults; apply_filters inputs; email/URL/IP val.
 
-Arrays: map/filter/reduce, foreach, array_pad; use array_key_exists for checks; sort consistent; unique keys; diff/merge.
+Arrays: map/filter/reduce, foreach, array_pad; array_key_exists checks; consistent sort; unique keys; diff/merge.
 
-PHP: Interfaces for hooks, annotate params/returns; use traits for shared logic; abstract classes; final methods; namespace use.
+PHP: Hook interfaces, annotate params/returns; traits shared; abstract classes; final methods; namespace use.
 
-Debugging: error_log JSON, no echo, WP_DEBUG; conditional debug if !WP_DEBUG; log levels; stack trace; profiler if slow.
+Debugging: JSON error_log, no echo, WP_DEBUG; !WP_DEBUG conditional; levels; stack; slow profiler.
 
-Data: readonly props, WP_Query over arrays; use get_transient for cache; serialize options; unserialize safe; validate unserialize.
+Data: readonly props, WP_Query > arrays; get_transient cache; safe serialize/unserialize; val unserialize.
 
-Input: sanitize_*, type guards; validate file uploads size/type; MIME check; virus scan if possible; hash files.
+Input: sanitize_*, type guards; upload size/type/MIME; virus scan; file hash.
 
-Documentation: PHPDoc/JSDoc, wp_date; @since for versions; @param types; @return desc; @example code.
+Documentation: PHPDoc/JSDoc, wp_date; @since vers; @param types; @return desc; @example.
 
-Frameworks: WP standards, React hooks, mySQL index; update PHPCS/ESLint monthly; React memo; SQL explain; optimize table.
+Frameworks: WP std, React hooks, mySQL index; monthly PHPCS/ESLint update; React memo; SQL explain; table opt.
 
 #### React/mySQL
-- React: Hooks for state, WP REST fetch, sanitize props; use useCallback for handlers; error boundaries; suspense load; context providers.
-- mySQL: $wpdb->prepare, esc_sql; use transactions for multi-queries; error on fail; last error log; vacuum tables.
+- React: State hooks, WP REST fetch, sanitize props; useCallback handlers; error boundaries; suspense; context.
+- mySQL: $wpdb->prepare, esc_sql; multi-query trans; fail error; last err log; vacuum.
 
-VS Code: PHP Intelephense, TS ext, Problems panel, formatOnSave, ESLint/PHPCS; keybind for WP doc lookup; theme WP colors; folding regions; snippet pack.
+RULE: Optimize PHP OOP. Composition > inheritance; class depth <=3; DI services; val injected; profile inst times.
+
+VS Code: Intelephense, TS ext, Problems, formatOnSave, ESLint/PHPCS; WP doc keybind; WP colors theme; folding; snippets. PHP DocBlockr; Ctrl+Shift+D bind.
+
+GUIDELINE: Promise Async. React API chain promises; PHP8+ async/await WP cron; global rejections; 30s timeouts; exp retry fails.
 
 ---
 
@@ -116,161 +160,169 @@ VS Code: PHP Intelephense, TS ext, Problems panel, formatOnSave, ESLint/PHPCS; k
 
 RULE: 98% Coverage Across 18 Categories
 
-Maintain 98% coverage (line/branch/path) for WP flows, edges, multisite, threats. Specific: Min branch 95%. General: Coverage trend up; report monthly.
+98% line/branch/path for WP flows, edges, multisite, threats. Branch min 95%. Trend up; monthly report.
 
 Cover 18 categories.
 
 1. Unit Tests
-   - Isolate PHP/React/mySQL units.
-   - Focus: Edges, boundaries, precision. Mock $wpdb/WP.
-   - Example: calculateTax with mocked options.
-   - Add: Test pure functions first; parametrize inputs; seed random; assert types.
+   - Isolate PHP/React/mySQL.
+   - Edges/boundaries/precision. Mock $wpdb/WP.
+   - Ex: calculateTax mocked options.
+   - Include: pure funcs first; parametrize; seed random; assert types.
+
+GUIDELINE: Property-Based Units. Random inputs via Hypothesis PHP; assert invariants; auto rare edges; CI regression.
 
 2. Integration Tests
-   - Check PHP/React/WP REST/mySQL flows.
-   - Focus: Hooks, DB, third-party.
-   - Example: Payment hook to mySQL.
-   - Add: Test nonce in calls; mock third-party; env setup; cleanup data.
+   - PHP/React/WP REST/mySQL flows.
+   - Hooks/DB/third-party.
+   - Ex: Payment hook to mySQL.
+   - Include: nonce calls; mock third; env setup; data cleanup.
 
 3. E2E Tests
-   - Full stack: React to PHP to mySQL.
-   - Focus: Multisite, workflows.
-   - Example: Checkout from React to email.
-   - Add: Use WP-CLI for setup; video record; user journey; assert email.
+   - Full stack React-PHP-mySQL.
+   - Multisite/workflows.
+   - Ex: React checkout to email.
+   - Include: WP-CLI setup; video; journeys; assert email.
 
 4. System Tests
-   - Plugin in WP env, health/resources.
-   - Focus: PHP-mySQL interplay.
-   - Example: Activate on staging.
-   - Add: Test with themes; memory limit; plugin conflict; server load.
+   - Plugin WP env, health/resources.
+   - PHP-mySQL interplay.
+   - Ex: Staging activate.
+   - Include: themes; mem limit; conflicts; server load.
 
 5. Regression Tests
-   - Re-run post-changes.
-   - Focus: Impact analysis.
-   - Example: Re-run auth after update.
-   - Add: Run on WP version change; selective by file; baseline compare; diff results.
+   - Post-change re-run.
+   - Impact analysis.
+   - Ex: Auth re-run post-update.
+   - Include: WP ver change; file-selective; baseline diff.
 
 6. Acceptance Tests
-   - Meet WP requirements, BDD.
-   - Focus: Scenarios.
-   - Example: Settings under 5s.
-   - Add: User stories in tests; Gherkin format; stakeholder sign; acceptance criteria.
+   - WP reqs, BDD.
+   - Scenarios.
+   - Ex: Settings <5s.
+   - Include: stories; Gherkin; stakeholder sign; criteria.
 
 7. Performance Tests
-   - Benchmark times/throughput.
-   - Example: JMeter AJAX <200ms.
-   - Add: Test mySQL locks; concurrent 50; flame graph; memory peak.
+   - Benchmark time/throughput.
+   - Ex: JMeter AJAX <200ms.
+   - Include: mySQL locks; 50 concurrent; flame graph; mem peak.
 
 8. Load/Stress Tests
-   - Peak surges, bottlenecks.
-   - Example: 10x users, monitor leaks.
-   - Add: Simulate cron jobs; ramp up load; break point; recovery time.
+   - Surges, bottlenecks.
+   - Ex: 10x users, leak monitor.
+   - Include: cron sim; ramp load; break/recovery.
 
 9. Security Tests
-   - Scan vulns, pen tests, WP compliance.
-   - Focus: OWASP, nonces.
-   - Example: ZAP for SQL/XSS/CSRF.
-   - Add: Test capability checks; fuzz inputs; Burp suite; auth bypass.
+   - Vuln scans, pen, WP compliance.
+   - OWASP/nonces.
+   - Ex: ZAP SQL/XSS/CSRF.
+   - Include: cap checks; fuzz; Burp; auth bypass.
 
 10. Compatibility Tests
-    - WP versions/themes/plugins/browsers/devices.
-    - Focus: Backward/forward.
-    - Example: React across WP 6.0+, browsers.
-    - Add: Test Gutenberg blocks; mobile viewport; plugin matrix; theme switch.
+    - WP vers/themes/plugins/browsers/devices.
+    - Backward/forward.
+    - Ex: React WP 6.0+ browsers.
+    - Include: Gutenberg; mobile; plugin matrix; theme switch.
 
 11. Accessibility Tests
-    - WCAG/ADA for React/PHP.
-    - Focus: Scans/audits.
-    - Example: Screen readers on forms.
-    - Add: Check focus order; contrast tool; WAVE scan; keyboard nav.
+    - WCAG/ADA React/PHP.
+    - Scans/audits.
+    - Ex: Screen readers forms.
+    - Include: focus order; contrast; WAVE; keyboard nav.
 
 12. Exploratory Tests
     - Unstructured probes.
-    - Focus: Heuristics/SBTM.
-    - Example: Unicode in search.
-    - Add: Test rapid clicks; edge devices; user personas; session notes.
+    - Heuristics/SBTM.
+    - Ex: Unicode search.
+    - Include: rapid clicks; edge devices; personas; notes.
 
 13. Smoke Tests
-    - Basic operational checks.
-    - Focus: Post-build.
-    - Example: Activate, load admin.
-    - Add: Check shortcodes; plugin list; menu item; console errors.
+    - Basic ops checks.
+    - Post-build.
+    - Ex: Activate/load admin.
+    - Include: shortcodes; plugin list; menu; console errs.
 
 14. Sanity Tests
-    - High-impact funcs post-change.
-    - Focus: Fixes.
-    - Example: Nonce after patch.
-    - Add: Test roles; user switch; cache clear; perm check.
+    - High-impact post-change.
+    - Fixes.
+    - Ex: Nonce post-patch.
+    - Include: roles; user switch; cache clear; perms.
 
 15. Usability Tests
     - Intuitiveness, SUS.
-    - Focus: Tasks/errors.
-    - Example: Configure settings.
-    - Add: Time on task; heatmap; A/B variants; survey score.
+    - Tasks/errors.
+    - Ex: Settings config.
+    - Include: task time; heatmap; A/B; survey.
 
 16. L10n/I18n Tests
-    - Multilingual, RTL, formats.
-    - Focus: Pseudo-loc.
-    - Example: Spanish dates/currency.
-    - Add: Test .po files; string length; locale switch; RTL layout.
+    - Multi/RTL/formats.
+    - Pseudo-loc.
+    - Ex: Spanish dates/curr.
+    - Include: .po; string len; locale switch; RTL.
 
 17. Recovery Tests
-    - Disruptions, recovery.
-    - Focus: Rollback/chaos.
-    - Example: DB terminate mid-query.
-    - Add: Test WP cache clear; failover sim; backup verify; data loss.
+    - Disruptions/recovery.
+    - Rollback/chaos.
+    - Ex: DB mid-query term.
+    - Include: WP cache clear; failover; backup; data loss.
 
 18. Data Integrity Tests
-    - Persistence, validation.
-    - Focus: ACID/restores.
-    - Example: Malformed import reject.
-    - Add: Backup/restore options; charset check; duplicate detect; constraint test.
+    - Persistence/val.
+    - ACID/restores.
+    - Ex: Malformed import reject.
+    - Include: backup/restore; charset; dup detect; constraints.
+
+RULE: Expand to 20 Cats w/ Visual/Network. Visual reg Percy; net intercept Cypress; UI theme consistency; slow net sim.
 
 ENFORCE:
-- Merge Gates: No integration without 98% peer-reviewed tests. Use SonarQube/Codecov; block low coverage; approve coverage; coverage delta.
-- Critical: BVT/E2E/Regression/Security + Perf/Recovery for auth/transactions; manual for critical; sign off; risk assess.
-- CI/CD: Automate in GitHub Actions/WP-CLI, parallel, flakiness alerts, approvals; retry 3x; artifact store; parallel envs.
-- Vigilance: Quarterly audits, TDD/BDD, dashboards; gap report; team train; coverage goal 99.
-- Add: Test on PHP 8.1+; BrowserStack; device lab; WP nightly.
+- Merge Gates: No int w/o 98% peer tests. SonarQube/Codecov; block low; approve delta.
+- Critical: BVT/E2E/Reg/Sec + Perf/Rec for auth/trans; manual critical; signoff; risk.
+- CI/CD: GitHub Actions/WP-CLI auto, parallel, flaky alerts, approvals; 3x retry; artifacts; parallel envs.
+- Vigilance: Q audits, TDD/BDD, dashes; gap reports; train; goal 99.
+- Add: PHP 8.1+; BrowserStack; device lab; WP nightly.
 
-VS Code: Test Explorer (PHPUnit/Jest). tasks.json for coverage. Codecov badges; run on save; debug test; test sidebar; inline coverage.
+VS Code: Test Explorer (PHPUnit/Jest). tasks.json coverage. Codecov badges; save run; debug; sidebar; inline. Test Runner UI visuals; coverage gutters.
 
 ---
 
 ### 5. Test Organization
 
-RULE: Mirror Structure, Keep Readable
+RULE: Mirror Structure, Readable
 
-Organize tests like source. Use AAA: Arrange mocks, Act, Assert. Specific: AAA in all. General: Colocate always; test naming convention.
+Tests like src. AAA: Arrange, Act, Assert. AAA all. Colocate; naming conv.
 
-- Unit: tests/unit/ mirror (userService.test.php); isolate WP with mocks; coverage per file; group assertions; assert types.
-- Integration: tests/integration/ by subsystem (ajax/); shared DB spins; env vars for test; teardown DB; cleanup data.
-- E2E: tests/e2e/ by journeys (admin-flow/); page objects for selectors; wait for load; screenshot fail; assert email.
-- Utilities: tests/utils/ mocks/factories; fake data generators; seeder class; configurable fakes; setup file shared.
-- Fixtures: tests/fixtures/ (sample-users.sql); version with schema; import script; clean script; data gen.
+- Unit: /tests/unit/ mirror (userService.test.php); WP mocks; per-file cov; group asserts; types.
+- Integration: /tests/integration/ subsystems (ajax/); shared DB; env vars; DB teardown; cleanup.
+- E2E: /tests/e2e/ journeys (admin-flow/); page objs selectors; wait load; screenshot fail; email assert.
+- Utilities: /tests/utils/ mocks/factories; fake gens; seeder; config fakes; shared setup.
+- Fixtures: /tests/fixtures/ (sample-users.sql); schema vers; import/clean scripts; data gen.
 
-PATTERN: Test per file. Names like shouldReturnProfileValidId; scenario in desc; given/when/then; test ID.
+PATTERN: Per-file tests. Names: shouldReturnProfileValidId; desc scenario; given/when/then; ID.
 
 Practices:
-- Naming: <module>.test.<ext>, describe/it; use table for data; nested describe; skip if known; tag tests.
-- Data: Parameterize, cleanup afterEach; reset DB state; teardown hooks; global setup; data factory.
-- Mocking: External only. Reset mocks afterEach (jest.resetAllMocks); restore in Mocha sinon.restore; spy on hooks; mock once; partial mocks.
-- CI: Parallel scripts, artifacts; flaky test labels; report HTML; email fail; timeout global.
-- Pitfalls: Over-mock, brittle selectors, timeouts; ignore slow tests; timeout 5s; mock time; stale mocks.
-- Benefits: Fast debug, TDD; CI pass rate; coverage trend; test isolation.
+- Naming: <module>.test.<ext>, describe/it; data tables; nested desc; skip known; tags.
+- Data: Param, afterEach cleanup; DB reset; teardown hooks; global setup; factory.
+- Mocking: External only. afterEach reset (jest.resetAllMocks); Mocha sinon.restore; hook spies; once/partial.
+- CI: Parallel, artifacts; flaky labels; HTML report; email fail; global timeout.
+- Pitfalls: Over-mock, brittle selectors/timeouts; ignore slow; 5s timeout; mock time; stale.
+- Benefits: Fast debug, TDD; CI rate; cov trend; isolation.
+
+GUIDELINE: Test Data Builders Fixtures. Builder classes complex objs; fluent custom; default quick; schema vers.
 
 Cache Clear Process:
-Clear Jest cache pre-runs for consistency. Specific: Clear before suite. General: Doc process.
+Clear Jest cache pre-runs consistency. Clear before suite. Doc process.
 
-1. Location: node_modules/.cache/jest/; config path; backup cache; multi-env.
-2. Command: npx jest --clearCache; --watch mode; selective clear; force flag.
-3. Workflows: package.json "test:clean", tasks.json task, CI prepend, Husky; pre-test only; log time; hook trigger.
-4. Verify: jest --no-cache; log warnings; diff results; re-run full.
-5. Edge: Per-package, invalidate configs; monorepo clear; custom transformer; log clear time; disk space check.
+1. Location: node_modules/.cache/jest/; config; backup; multi-env.
+2. Command: npx jest --clearCache; watch; selective; force.
+3. Workflows: pkg "test:clean", tasks.json, CI prepend, Husky; pre-test; log time; hook.
+4. Verify: --no-cache; warn log; results diff; full re-run.
+5. Edge: Per-pkg, invalidate configs; monorepo; custom trans; clear time log; disk check.
 
-ENFORCE: Document in README. Gate merges; script in package; warn if not; enforce via lint. Specific: Clear daily. General: Train on process; monitor cache size.
+ENFORCE: README doc. Merge gate; pkg script; warn not; lint enforce. Daily clear. Train; monitor size.
 
-VS Code: Search/symbols for tests. Debugger breakpoints. Testing ext watch. Tasks for clear; keybind test run; coverage view; test config; run group.
+VS Code: Test search/symbols. Debugger bps. Testing watch. Clear tasks; keybind run; cov view; config; groups. Watch toggle iterative.
+
+RULE: Contract Testing APIs. Consumer contracts; Pact val; indep WP REST; backward compat; CI auto.
 
 ---
 
@@ -278,22 +330,24 @@ VS Code: Search/symbols for tests. Debugger breakpoints. Testing ext watch. Task
 
 ### 6. Automatic Updates
 
-RULE: Update Docs with Changes
+RULE: Update Docs w/ Changes
 
-Treat docs as code: version, test, review. Automate. Specific: Update per commit. General: Audit docs quarterly; doc coverage 90%.
+Docs as code: ver/test/review. Auto. Per-commit update. Q audit; 90% cov.
 
-- VERSION: Increment header, notes. semantic-release Composer; update "Tested up to"; changelog link; requires PHP; min WP.
-- CHANGELOG: Detail files/features/bugs. Keep format: Added/Changed/etc; link WP Trac; breaking section; migration steps; contrib credits.
-- README: Instructions/examples/badges; quickstart code; FAQ section; screenshots; install video.
-- API: PHPDoc/JSDoc, Swagger REST; hook examples; endpoint params; response codes; auth req.
+- VERSION: Inc header/notes. semantic-release Composer; "Tested up to"; changelog link; PHP req; min WP.
+- CHANGELOG: Files/feats/bugs detail. Format: Added/Changed/etc; WP Trac link; breaking; migration; credits.
+- README: Instr/ex/badges; quickstart code; FAQ; screenshots; install vid.
+- API: PHPDoc/JSDoc, Swagger REST; hook ex; endpoint params; resp codes; auth.
 
 Guidelines:
-- Templates: MD for notes/endpoints; include nonces in examples; migration guide; before/after; template vars.
-- Auto: phpDocumentor/JSDoc/Docusaurus; build on CI; deploy docs; search index; auto link.
-- Validation: Vale/Alex; check links; spell check; grammar; readability score.
-- Accessibility: Headings/alt/readable; plain text alternatives; screen reader notes; table headers; color contrast.
+- Templates: MD notes/endpoints; nonce ex; migration; before/after; vars.
+- Auto: phpDocumentor/JSDoc/Docusaurus; CI build/deploy; search; auto-link.
+- Validation: Vale/Alex; links/spell/grammar; readability.
+- Accessibility: Headings/alt; plain alt; screen notes; table headers; contrast.
 
-VS Code: Markdown Preview. Husky for CHANGELOG; snippet for PHPDoc; lint docs; link validate; toc gen.
+GUIDELINE: Interactive API Docs. Swagger UI REST; admin embed; annot auto-update; try-it; schema val.
+
+VS Code: MD Preview. Husky CHANGELOG; PHPDoc snippet; doc lint; link val; toc gen. MD All in One preview/auto-toc.
 
 ---
 
@@ -301,17 +355,21 @@ VS Code: Markdown Preview. Husky for CHANGELOG; snippet for PHPDoc; lint docs; l
 
 RULE: Semantic Versioning
 
-- MAJOR: Breaking API/mySQL; update WP requires; dep list; changelog major; bump year if calver.
-- MINOR: Compatible adds; new React features; feature flag; opt-in; add compat note.
-- PATCH: Fixes; security patches; hotfix tag; urgent note; backport if stable.
+- MAJOR: Breaking API/mySQL; WP req update; dep list; major changelog; calver year bump.
+- MINOR: Compat adds; React feats; flags; opt-in; compat note.
+- PATCH: Fixes; sec patches; hotfix tag; urgent note; stable backport.
 
 Guidelines:
-- Pre: -alpha for beta; test in staging; beta users; feedback form; changelog pre.
-- Changelogs: Link tags/issues; WP.org notes; diff prev; size change; user impact.
-- Tools: Composer/npm, calver optional; lockfile commit; audit post-update; compat test; diff tool.
-- Deprecation: Advance notice, guides; admin notices; console warn; remove next major; migrate script.
+- Pre: -alpha beta; staging test; beta users; feedback; pre-changelog.
+- Changelogs: Tags/issues links; WP.org notes; prev diff; size/impact.
+- Tools: Composer/npm, opt calver; commit locks; post-audit; compat test; diff.
+- Deprecation: Notice/guides; admin/console warn; next major remove; migrate script.
 
-VS Code: Version Lens for bumps; preview changes; auto changelog; tag push. Specific: Bump on merge. General: Review versions monthly; version policy doc.
+VS Code: Version Lens bumps; changes preview; auto changelog; tag push. Merge bump. Monthly review; policy doc.
+
+RULE: Release Candidates Testing. Pre-final RC tags; private WP.org dist; beta feedback; auto RC builds; deprec 2wks.
+
+GUIDELINE: Dep Metrics Track. Log deprecated usage; admin warns; migrate script; removal deadlines; email notify.
 
 ---
 
@@ -319,16 +377,20 @@ VS Code: Version Lens for bumps; preview changes; auto changelog; tag push. Spec
 
 RULE: Inline/External Docs
 
-- Document public funcs/classes/APIs/logic; why for decisions; examples for configs/workflows; WP role examples; error cases; success paths; perf notes.
+Doc public funcs/classes/APIs/logic; why decisions; ex configs/workflows; WP roles; err/success paths; perf notes.
 
 Guidelines:
-- Inline: PHPDoc/JSDoc params/returns/thrown/examples/@see; @wp-hook for filters; @version tag; @access public; @deprecated if.
-- Architecture: ADRs in docs/adrs/; one per decision; template ADR; status column; review ADR.
-- Process: MD for workflows; onboard steps; diagram key; flow chart; checklist process.
-- Diagrams: Mermaid/PlantUML in MD; hook flows; export PNG; alt text; interactive if.
-- Review: PRs include updates, checklists; doc test in CI; link check; coverage doc; doc PR.
+- Inline: PHPDoc/JSDoc params/returns/thrown/ex/@see; @wp-hook filters; @version; @access public; @deprecated.
+- Architecture: /docs/adrs/ per decision; ADR template; status col; review.
+- Process: MD workflows; onboard; diagrams; flowcharts; checklists.
+- Diagrams: MD Mermaid/PlantUML; hook flows; PNG export; alt; interactive.
+- Review: PR updates/checklists; CI doc test; link check; cov; doc PR.
 
-VS Code: Auto stubs (Insert JSDoc). Thunder Client API; preview hooks; generate all; sync doc. Specific: Doc in PR template. General: Doc sprints; doc review.
+VS Code: Auto JSDoc stubs. Thunder API; hook preview; gen all; sync. PR template doc. Sprint reviews.
+
+GUIDELINE: User-Facing Guides. /docs/user/; troubleshooting FAQ; vid tuts; printable checklists; release update; localize.
+
+RULE: Terms Glossary. WP terms 'nonce'/'transient'; /docs/glossary.md update; inline links; annual review; WP Codex contrib.
 
 ---
 
@@ -338,11 +400,15 @@ VS Code: Auto stubs (Insert JSDoc). Thunder Client API; preview hooks; generate 
 
 RULE: No Secrets Exposed/Committed
 
-- Storage: WP options/env, managers; encrypt if needed; salt keys; rotate periodic; audit access.
-- Templates: .env.example; list vars; default placeholders; comment use; example values.
-- No commit: .env/keys; .gitignore rules; pre-commit scan; CI scan; git history clean.
+- Storage: WP options/env managers; encrypt if; salt keys; periodic rotate; access audit.
+- Templates: .env.example; var list; placeholders; comment use; ex vals.
+- No commit: .env/keys; .gitignore; pre-commit/CI scan; git hist clean.
 
-VS Code: dotenv load. Git view .gitignore; alert on secrets; GitGuardian ext; scan push. Specific: Scan weekly. General: Policy doc; secret rotation plan.
+VS Code: dotenv load. Git .gitignore view; secrets alert; GitGuardian ext; push scan. Weekly scan. Policy; rotation plan.
+
+RULE: Encryption Enforce. WP salts encrypt; AES-256 options; WP config key mgmt; demand decrypt; usage audit.
+
+GUIDELINE: Access Logging. Log reads/writes sens data; IP anonymize; 90d retain; admin query; anomalous alerts.
 
 ---
 
@@ -350,11 +416,15 @@ VS Code: dotenv load. Git view .gitignore; alert on secrets; GitGuardian ext; sc
 
 RULE: Validate/Sanitize Inputs
 
-- Payloads/uploads/queries; size/type checks; max length; min value; format match.
-- Sanitize text; for JS too; DOMPurify; HTML strip; entity decode.
-- Parameterized DB; bind all vars; escape raw; quote safe; input log.
+- Payloads/uploads/queries; size/type; max len; min val; format.
+- Sanitize text/JS; DOMPurify; HTML strip; entity decode.
+- Param DB; bind vars; escape raw; safe quote; input log.
 
-VS Code: Schema previews JSON Store; inline hints; VSCode schema; validate on type. Specific: Test inputs. General: Review validate code; validate library.
+VS Code: JSON schema previews; inline hints; VSCode schema; type val. Input test. Val code review; lib.
+
+GUIDELINE: Schema Libs. Yup/Joi complex; recursive val; detailed errs; schema evo test; all layers enforce.
+
+RULE: Endpoint Rate Limit. Token bucket; transient store; admin IP exempt; config thresh; throttle log.
 
 ---
 
@@ -362,15 +432,19 @@ VS Code: Schema previews JSON Store; inline hints; VSCode schema; validate on ty
 
 RULE: Robust Error Management
 
-Adopt approach for security, maintainability, UX. Specific: Cover 100% branches. General: Error taxonomy doc.
+Sec/maint/UX approach. 100% branch cov. Taxonomy doc.
 
-- No Internal Exposure: No traces/debug to users. Log internal; use WP_Error; suppress in prod; user vs dev mode; mask details.
-- Structured Logging: JSON with timestamp/code/level/metadata; WP cron alert; rotate size; searchable; aggregate tool.
-- User Messages: Descriptive, actions, plain language; admin notices; dismissible; link support; localize msg.
-- Fallbacks: Cache/alts/queue; transients on fail; offline mode; grace period; retry mech.
-- Auto Reporting: Test fails to GitHub Issue summary/steps/logs/tags; screenshots for E2E; attach video; auto label; triage bot.
+- No Internal Exposure: No user traces/debug. Internal log; WP_Error; prod suppress; dev/user mode; mask details.
+- Structured Logging: JSON timestamp/code/level/meta; WP cron alert; size rotate; searchable; aggregate.
+- User Messages: Desc/actions/plain; admin notices; dismiss; support link; localize.
+- Fallbacks: Cache/alts/queue; transient fail; offline; grace; retry.
+- Auto Reporting: Test fails GitHub issue sum/steps/logs/tags; E2E screenshots/vid; auto label; triage bot.
 
-VS Code: Debugger breakpoints. Output channels; log filter; export logs; search log. Specific: Log review weekly. General: Error playbook; post-mortem template.
+VS Code: Debugger bps. Output channels; log filter/export/search. Weekly review. Playbook; post-mortem template.
+
+RULE: Error Type Classify. Custom classes val/net/auth; extend WP_Error; codes; user msg map; freq track.
+
+GUIDELINE: Graceful Degradation. Early detect; cached fallback; partial fail notify; retry queue; degrado metrics.
 
 ---
 
@@ -380,11 +454,15 @@ VS Code: Debugger breakpoints. Output channels; log filter; export logs; search 
 
 RULE: Monitor Resources
 
-- Release handles/connections; close cursors; GC hints; unset vars; profile alloc.
-- Caching/pooling; object cache; Memcached if avail; Redis option; invalidate cache.
-- Monitor memory/CPU/network; query times; flame graph; profile tool; alert high.
+- Release handles/conns; close cursors; GC hints; unset vars; alloc profile.
+- Caching/pooling; obj cache; Memcached/Redis opt; invalidate.
+- Mem/CPU/net monitor; query times; flame graph; profile; high alert.
 
-VS Code: Process Explorer. tasks.json profiling; run on load; threshold alert; chart view. Specific: Profile monthly. General: Perf budget; optimize guide.
+VS Code: Process Explorer. tasks.json profile; load run; thresh alert; chart. Monthly profile. Perf budget; opt guide.
+
+GUIDELINE: Obj Pooling Heavy. Pool DB conns; React comp reuse; size <=10; health monitor; evict idle.
+
+RULE: mySQL Queries Opt. EXPLAIN all; no SELECT *; limit 100; batch inserts; composite indexes; weekly vacuum.
 
 ---
 
@@ -392,11 +470,15 @@ VS Code: Process Explorer. tasks.json profiling; run on load; threshold alert; c
 
 RULE: Respect Services
 
-- Config limits; WP cron track; IP hash; user based; token bucket.
-- Retries backoff; max retries 3; jitter delay; circuit break; status track.
-- Quotas policies; doc usage; user settings; admin adjust; report exceed.
+- Config limits; WP cron track; IP/user hash; token bucket.
+- Retries backoff; max 3; jitter; circuit break; status track.
+- Quota policies; doc usage; user/admin adjust; exceed report.
 
-VS Code: REST Client sims; mock responses; throttle test; delay sim. Specific: Test limits. General: Policy update; quota dashboard.
+VS Code: REST Client sims; mock resp; throttle test; delay. Limit test. Policy update; quota dash.
+
+GUIDELINE: Circuit Breakers Externals. Open fails; half-open timeout; fail rate track; config thresh; state log.
+
+RULE: Aggressive Cache/Invalidation. WP obj cache reads; tag invalid; stale-while-reval; React client cache; update purge.
 
 ---
 
@@ -407,31 +489,39 @@ VS Code: REST Client sims; mock responses; throttle test; delay sim. Specific: T
 RULE: Conventional Commits
 
 Format: type(scope): desc
-Types: feat/fix/docs/style/refactor/test/chore; scope wp-admin/db/react; body details; footer issues; breaking! if.
+Types: feat/fix/docs/style/refactor/test/chore; scope wp-admin/db/react; body details; footer issues; breaking!.
 
-VS Code: GitLens templates/validation; hook enforce; amend if invalid; co-author. Specific: Review msgs. General: Convention train; commit lint.
+VS Code: GitLens templates/val; hook enforce; amend invalid; co-author. Msg review. Train conv; commitlint.
+
+GUIDELINE: Metadata Enrich. Perf impact notes; benchmark links; affected tests; co-authored-by; commitlint val.
+
+RULE: Pre-Merge Squash. Logical units combine; conv format preserve; squash template; hist review; no over-squash.
 
 ---
 
 ### 15. Errors as Issues
 
-RULE: Track Errors/Bugs in Issues
+RULE: Track Errors/Bugs Issues
 
-Log all in GitHub for visibility. Test fails first. Specific: Issue per error. General: Weekly triage; close stale.
+GitHub log all visibility. Test fails first. Issue/error. Weekly triage; stale close.
 
 Guidelines:
-- Title: Summary e.g. "AJAX 500 empty payload"; include WP version; PHP ver; React ver; env tag.
-- Description: Context/steps/expected/actual/screenshots/logs; mySQL dump if relevant; env details; repro repo; minimal code.
-- Labels: bug/security/perf/docs; wp-compat; area-php/react; severity; module tag.
-- Priority: critical/high/medium/low; auto based on impact.
-- Assignees: Dev/team; based on area; auto assign; notify; rotate.
-- Linkage: Commits/PRs/discussions; WP Trac; related issues; duplicate check; blocks.
-- Lifecycle: Create/triage/assign/resolve/close; weekly review; close criteria; verified label; reopen policy.
+- Title: Sum ex "AJAX 500 empty"; WP/PHP/React ver; env tag.
+- Desc: Context/steps/exp/act/screenshots/logs; mySQL dump; env; repro repo/code.
+- Labels: bug/sec/perf/docs; wp-compat; area-php/react; sev; module.
+- Priority: crit/high/med/low; auto impact.
+- Assignees: Dev/team; area-based; auto/notify/rotate.
+- Linkage: Commits/PRs/disc/WP Trac; related/dup/blocks.
+- Lifecycle: Create/triage/assign/resolve/close; weekly rev; criteria; verified; reopen pol.
 
 ENFORCE:
-- Document all; no private reports; reference in close; template for issues; required fields; bot validate; auto close duplicates.
+- All doc; no private; close ref; issue template; req fields; bot val; auto dup close.
 
-VS Code: GitHub ext create/manage; inline link; bulk edit; search issues. Specific: Template load. General: Issue bot; label policy.
+VS Code: GitHub ext create/manage; inline link; bulk edit; search. Template load. Bot; label pol.
+
+RULE: Bot Auto Triage. Probot labeling; keyword sev; module assign; sim dup close; Slack crit notify.
+
+GUIDELINE: Root Cause Analysis. 5 Whys desc; fishbone diags; prev measures; retro rev; RCA rate track.
 
 ---
 
@@ -439,13 +529,17 @@ VS Code: GitHub ext create/manage; inline link; bulk edit; search issues. Specif
 
 RULE: Structured Branching
 
-- main: Prod ready; tag releases; sign tags; protect push; require status.
-- develop: Integration; merge weekly; hotfix to develop too; nightly build; test branch.
-- feature/*: New; from develop; ticket in name; WIP prefix; delete after merge.
-- hotfix/*: Urgent; to main; backport develop; test urgent; short life.
-- release/*: Prep; final tests; cherry-pick fixes; RC tag; freeze code.
+- main: Prod; release tags; sign; protect push/status req.
+- develop: Int; weekly merge; hotfix too; nightly; test branch.
+- feature/*: New; from develop; ticket name; WIP prefix; post-merge delete.
+- hotfix/*: Urgent; to main; develop backport; urgent test; short life.
+- release/*: Prep; final tests; cherry fixes; RC tag; code freeze.
 
-VS Code: Source Control switch. Git Graph visualize; color branches; merge conflict tool; branch create cmd. Specific: Delete merged. General: Branch policy doc; prune old.
+VS Code: SC switch. Git Graph viz; branch colors; conflict tool; create cmd. Delete merged. Pol doc; prune old.
+
+GUIDELINE: Rebase Clean Hist. Feature rebase pre-PR; local conflicts; no shared force-push; doc workflow; train rebase -i.
+
+RULE: Branch Lifespan Limit. 7d max features; auto-close stale PRs; owner notify; archive long; exc review.
 
 ---
 
@@ -453,28 +547,36 @@ VS Code: Source Control switch. Git Graph visualize; color branches; merge confl
 
 RULE: Automated Checks
 
-- Linting PHPCS/ESLint; custom sniffs; fix auto; format code; style guide.
-- Type-check; PHPStan level 5; TS strict; no errors; warn only.
-- Tests pass; coverage min; unit only pre; quick smoke; integration light.
-- Security scans; composer audit; npm audit; secrets scan; vuln fix.
+- Linting PHPCS/ESLint; custom sniffs; auto fix; format; style.
+- Type-check; PHPStan lv5; TS strict; no errs; warn only.
+- Tests pass; min cov; unit pre; smoke quick; int light.
+- Sec scans; composer/npm audit; secrets; vuln fix.
 
-VS Code: Husky/lint-staged tasks. Ctrl+Shift+P Run Task; status bar indicator; pass/fail icon; quick fix. Specific: Run silent. General: Update hooks; check log.
+VS Code: Husky/lint-staged. Ctrl+Shift+P Task; status ind; pass/fail icon; quick fix. Silent run. Hook update; log check.
+
+RULE: Dep Diff Checks. Breaking changes scan; major bump block; migration notes; post-update test pre-commit.
+
+GUIDELINE: Early Static Analysis. Psalm PHP types; SonarLint smells; high sev fail; auto-fix; trend report.
 
 ---
 
 ### 18. Commit/Merge to main
 
-RULE: Commit/Merge with Notes
+RULE: Commit/Merge w/ Notes
 
-Follow tasklists/mergeGitHub.md. Specific: Notes required. General: Merge train; post-merge hook.
+Follow mergeGitHub.md. Notes req. Merge train; post-hook.
 
 Guidelines:
-- Commit: Stage Source Control. Conventional msgs detail/rationale/files/testing, no emojis; prefix slug; sign commits; verify sign; amend if lint fail.
-- Merge: PR feature to main. Notes scope/details/coverage/impacts. Reviews 1+; assign reviewer; auto review request; thread comments; conflict resolve.
-- Format: Summary/Changes/Testing/Rationale/Next; risks section; related PRs; dep on PR; user story.
-- ENFORCE: No direct push. Approvals. Actions checks. Reference checklists; rebase option; squash default; merge msg; timeout PR.
+- Commit: SC stage. Conv msgs detail/rationale/files/test, no emojis; slug prefix; sign/verify; lint amend.
+- Merge: PR feat to main. Notes scope/details/cov/impacts. 1+ rev; reviewer assign; auto req; thread comm; conflict res.
+- Format: Sum/Changes/Test/Rationale/Next; risks; related PRs; dep PR; story.
+- ENFORCE: No direct push. Approvals. Actions checks. Checklists ref; rebase opt; squash def; msg; PR timeout.
 
-VS Code: GitLens history/blame. GitHub Repos PR/merge; inline review; resolve thread; draft PR. Specific: Auto draft. General: Review guidelines; merge bot.
+VS Code: GitLens hist/blame. GitHub PR/merge; inline rev; thread res; draft. Auto draft. Rev guidelines; bot.
+
+GUIDELINE: Merge Queues Safety. GitHub queue PRs; queue CI; fail rollback; delay notify; size <=5.
+
+RULE: Post-Merge Verif. Smoke post-merge; prod metrics mon; anomaly revert; doc steps; alert auto.
 
 ---
 
@@ -482,48 +584,56 @@ VS Code: GitLens history/blame. GitHub Repos PR/merge; inline review; resolve th
 
 ### 19. Feature Process
 
-WORKFLOW: Git Flow for WP. Specific: 1 week max feature. General: Retrospective end; sprint plan.
+WORKFLOW: Git Flow WP. 1w max feat. Retro end; sprint plan.
 
-1. Branch from develop: feature/<id>-desc. Pull latest; update submodules; stash if needed; local branch; init git flow.
-2. Implement/tests: TDD, 98% coverage. Mock WP; commit often; branch tests; lint per commit; daily build.
-3. Docs: Inline/README/API. Generate; check links; update pot; translate sample; doc test.
-4. Checks: Lint/test/build WP-CLI; coverage report; WP version test; theme compat; security scan.
-5. PR: Checklist/tests/docs/screenshots. Link issues; draft if WIP; labels auto; size estimate; auto lint.
-6. Review: 1+ approval. Address feedback; ping if stalled; re-review changes; unit test add; conflict free.
-7. Merge develop: Squash/conflicts. CI integration; notify channel; update changelog; tag dev; back merge.
-8. Staging: CI/CD deploy. Verify flows; multisite test; load test; user accept; smoke prod.
-9. Main/prod: Approval. Tag/notify; WP.org submit; release notes; announce; monitor first day.
+1. Branch develop: feature/<id>-desc. Latest pull; submod update; stash; local; git flow init.
+2. Implement/tests: TDD, 98% cov. WP mock; often commit; branch tests; per-commit lint; daily build.
+3. Docs: Inline/README/API. Gen; link check; pot update; sample trans; doc test.
+4. Checks: Lint/test/build WP-CLI; cov report; WP ver/theme compat; sec scan.
+5. PR: Checklist/tests/docs/screenshots. Issue link; WIP draft; auto labels; size est; auto lint.
+6. Review: 1+ approval. Feedback address; stall ping; re-rev changes; add unit; conflict-free.
+7. Merge develop: Squash/conflicts. CI int; channel notify; changelog update; dev tag; back merge.
+8. Staging: CI/CD deploy. Flows verify; multisite/load/user accept; smoke prod.
+9. Main/prod: Approval. Tag/notify; WP.org sub; notes; announce; day1 mon.
 
 Guidelines:
-- Roles: Dev implement/review standards/QA WP; rotate reviewers; mentor new; pair program; QA gate.
-- Tools: GitHub Projects/Slack; ticket templates; bot reminders; integration bot; time track.
-- Escalation: Issues/standups; daily sync; blockers board; escalate matrix; root cause.
-- Metrics: <3 days cycle; track velocity; burn down; lead time; defect rate.
+- Roles: Dev impl/rev std/QA WP; rotate rev; mentor; pair; QA gate.
+- Tools: GitHub Proj/Slack; templates; bot reminders; int bot; time track.
+- Escalation: Issues/standups; daily sync; blockers; matrix; root cause.
+- Metrics: <3d cycle; velocity; burn/lead time; defect rate.
 
-VS Code: Terminal Ctrl+` WP-CLI. keybindings Git; task for full flow; PR template; workflow ext. Specific: Auto task run. General: Workflow doc; sprint board.
+VS Code: Terminal Ctrl+` WP-CLI. Git keybinds; full flow task; PR template; workflow ext. Auto task. Doc; sprint board.
+
+GUIDELINE: Pair Prog Sessions. Complex feats pair; weekly rotate; dec doc; opt record; PR pair rev.
+
+RULE: Feat Flags Safe Rollouts. WP options flags; user/role toggle; A/B int; usage audit; post-val remove.
 
 ---
 
 ### 20. Code Review
 
-RULE: Mandatory for Merges
+RULE: Mandatory Merges
 
-Checkpoints for standards/knowledge/issues. <24h, constructive. Specific: 2 reviewers if complex. General: Review training; metrics track.
+Standards/know/issues checkpoints. <24h constructive. 2 rev complex. Train; metrics.
 
 Check:
-- Correctness: Logic/edges WP; run manual test; console check; input vary; repro steps.
-- Security: OWASP/nonces; scan static; secrets scan; role test; auth flow.
-- Coverage: 98%/quality; review mocks; edge coverage; mutation test; integration link.
-- Docs: Complete; examples work; translatable; link valid; user guide.
-- Consistency: Layers/naming/WP; standards check; perf note; bundle size; i18n ready.
+- Correctness: Logic/edges WP; manual test; console; input vary; repro.
+- Security: OWASP/nonces; static scan; secrets; role; auth flow.
+- Coverage: 98%/qual; mock rev; edges; mutation; int link.
+- Docs: Complete; ex work; trans; links; guide.
+- Consistency: Layers/naming/WP; std check; perf note; bundle; i18n.
 
 Guidelines:
-- Template: PR sections; required fields; checkbox; auto fill; video demo.
-- Practices: Impact/alts/approve confident; positive notes; suggestion code; diff view; block if critical.
-- Escalation: >48h lead; escalate log; timeout auto; notify lead; mediation process.
-- Learning: Retros; monthly; feedback form; anon survey; review tips doc.
+- Template: PR sections; req fields; checkbox; auto fill; vid demo.
+- Practices: Impact/alts/conf approve; pos notes; code suggest; diff; crit block.
+- Escalation: >48h lead; log; auto timeout; lead notify; mediation.
+- Learning: Monthly retros; feedback form; anon survey; tips doc.
 
-VS Code: Live Share annotate. GitHub comments/approvals; thread feedback; emoji reactions; suggest changes. Specific: Review checklist. General: Review metrics; peer swap.
+VS Code: Live Share annotate. GitHub comm/approvals; thread feedback; emoji; suggest. Checklist. Metrics; peer swap.
+
+RULE: LGTM Threshold. 2 sec changes; 1 docs; module auto-req; balance track; 48h timeout.
+
+GUIDELINE: Feedback Templates. Sandwich; spec ex; alts suggest; impact focus; pos end; skills train.
 
 ---
 
@@ -533,11 +643,15 @@ VS Code: Live Share annotate. GitHub comments/approvals; thread feedback; emoji 
 
 RULE: Isolated Environments
 
-- Dev/test/prod WP configs; Docker for local; compose file; volume mount; network isolate.
-- Local overrides no commit; .env per env; gitignore env; template copy; var validate.
-- Validate schemas; JSON lint; config test; diff tool; backup config.
+- Dev/test/prod WP configs; local Docker; compose; vol mount; net isolate.
+- Local overrides no commit; per-env .env; gitignore; template copy; var val.
+- Schema val; JSON lint; config test; diff; backup.
 
-VS Code: Multi-root folders. .vscode/settings overrides; env switch task; reload window; workspace file. Specific: Env vars secure. General: Env doc; rotate creds.
+VS Code: Multi-root. .vscode/settings overrides; env task; reload; workspace. Secure vars. Doc; cred rotate.
+
+GUIDELINE: IaC. Docker Compose all envs; ver infra; change test; auto prov; setup scripts doc.
+
+RULE: Team Config Sync. Shared repo; clone pull; diff val; change notify; rev enforce.
 
 ---
 
@@ -545,12 +659,16 @@ VS Code: Multi-root folders. .vscode/settings overrides; env switch task; reload
 
 RULE: Secure Practices
 
-- Audit composer/npm; weekly; alert vulns; patch apply; report summary.
-- Pin versions locks; no ^/~; exact semver; range test; dep tree.
-- Trusted sources; WP.org first; verify checksum; signature check; source audit.
-- Auto updates; PR for changes; test post-update; rollback plan; freeze critical.
+- Weekly composer/npm audit; vuln alert/patch; summary report.
+- Pin locks; no ^/~; exact semver; range test; dep tree.
+- Trusted srcs; WP.org first; checksum/sig; source audit.
+- Auto updates; change PR; post-test; rollback; crit freeze.
 
-VS Code: npm Intellisense complete/warn; audit on install; dep graph; tree view. Specific: Lock commit. General: Dep policy; quarterly review.
+VS Code: npm Intellisense complete/warn; install audit; dep graph/tree. Lock commit. Pol; Q review.
+
+RULE: Dep Health Scores. Score sec/maint/pop; low block; monthly rev; deprec migrate.
+
+GUIDELINE: Deprec Handling Auto. Scan deprec; migration tickets; alt test; gradual phase; paths doc.
 
 ---
 
@@ -560,12 +678,16 @@ VS Code: npm Intellisense complete/warn; audit on install; dep graph; tree view.
 
 RULE: Automated Monitoring
 
-- Health endpoints REST; /wp-json/myplugin/health; metrics JSON; status codes; uptime ping.
-- Monitor DB/API; ping cron; uptime check; response time; error count.
-- Metrics track; query times; render time; error rate; user sessions.
-- Alert real-time; email on fail; Slack hook; threshold set; escalation chain.
+- REST health /wp-json/myplugin/health; JSON metrics; status/uptime ping.
+- DB/API mon; cron ping; uptime/resp time/err count.
+- Track queries/render/err rate/sessions.
+- Real-time alert; email/Slack; thresh; esc chain.
 
-VS Code: Tasks endpoint test; mock server; response view; curl task. Specific: Daily ping. General: Monitor dashboard; alert tune.
+VS Code: Endpoint task test; mock server; resp view; curl. Daily ping. Dash; alert tune.
+
+GUIDELINE: APM Tools. New Relic PHP trace; Sentry errs; Grafana dash; trace-log corr; 99.9% SLOs.
+
+RULE: UX Metrics Mon. Page loads; user err rates; sessions; A/B impacts; drop alerts.
 
 ---
 
@@ -573,12 +695,16 @@ VS Code: Tasks endpoint test; mock server; response view; curl task. Specific: D
 
 RULE: Structured Logging
 
-- Levels error/warn/info/debug WP; custom levels; filter by user; context add; level rotate.
-- Correlation IDs requests; for AJAX; trace ID; propagate; span log.
-- Security explicit; nonce fails; login attempts; IP log; audit trail.
-- JSON prod; rotate size; backup logs; search index; export format.
+- Levels err/warn/info/debug WP; custom; user filter; context; rotate.
+- Corr IDs reqs/AJAX; trace ID prop; span log.
+- Sec explicit; nonce fails; logins; IP; audit.
+- Prod JSON; size rotate; backup; search/export.
 
-VS Code: Log Viewer parse/filter; search keywords; export CSV; tail file. Specific: Log review weekly. General: Log retention; compliance audit.
+VS Code: Log Viewer parse/filter; keyword search; CSV export; tail. Weekly rev. Retention; audit.
+
+RULE: ELK Central Logs. Elasticsearch ship; Kibana viz; corr query; 30d retain; auto rotate.
+
+GUIDELINE: Sens Log Anonymize. PII mask/token; GDPR comply; content audit; user export.
 
 ---
 
@@ -588,14 +714,18 @@ VS Code: Log Viewer parse/filter; search keywords; export CSV; tail file. Specif
 
 RULE: Pass Checklist
 
-- BVT post-build; smoke run; version check; dep check; build verify.
-- Tests pass; E2E too; parallel run; matrix WP; coverage full.
-- Scans complete; vuln zero; static analysis; code smell; dep vuln.
-- Benchmarks valid; load test; threshold pass; perf budget; scale sim.
-- Docs updated; WP.org ready; zip build; changelog include; license check.
-- Monitoring operational; alert test; prod config; env vars; rollback test.
+- BVT post-build; smoke; ver/dep check; build verify.
+- Tests/E2E pass; parallel; WP matrix; full cov.
+- Scans complete; zero vuln; static/smell; dep vuln.
+- Benchmarks; load test; thresh pass; perf budget; scale sim.
+- Docs update; WP.org ready; zip; changelog; license.
+- Mon op; alert test; prod config; env/rollback test.
 
-VS Code: tasks.json Run Build; checklist task; output report; pass gate. Specific: Checklist sign. General: Deploy doc; readiness gate.
+VS Code: tasks.json Build; checklist task; report; gate pass. Sign. Deploy doc; readiness gate.
+
+GUIDELINE: Auto Readiness Gates. GitHub Actions verif; fail block; reports; signoffs; pass rate track.
+
+RULE: Dry-Run Deploys. Sim no changes; config val; hook test; log outputs; pre-live fix.
 
 ---
 
@@ -603,12 +733,16 @@ VS Code: tasks.json Run Build; checklist task; output report; pass gate. Specifi
 
 RULE: Safe Deploy/Rollback
 
-- Rollback mechanisms; deactivate CLI; DB revert; file backup; snapshot.
-- Staged/blue-green; versioned deploys; canary users; rollout percent; monitor rollout.
-- Monitor metrics post; baseline compare; anomaly detect; rollback trigger; post-roll log.
-- Runbooks; scenarios list; contact list; test runbook; drill quarterly.
+- Mechs: CLI deactivate; DB revert; file backup; snapshot.
+- Staged/blue-green; ver deploys; canary/percent rollout; mon.
+- Post metrics; baseline comp; anomaly detect; trigger; log.
+- Runbooks: scenarios/contacts; test; Q drill.
 
-VS Code: MD Outline reference; search runbook; print PDF; link external. Specific: Rollback drill. General: Incident plan; post-incident review.
+VS Code: MD outline; runbook search; PDF print; external link. Drill. Incident plan; post-rev.
+
+RULE: Staging Rollback Tests. Weekly practice; <5min time; data int post; fail doc; mech improve.
+
+GUIDELINE: Flags for Rollbacks. Feat toggle off vs full; gradual; impact mon; easier DB; hist audit.
 
 ---
 
@@ -616,51 +750,59 @@ VS Code: MD Outline reference; search runbook; print PDF; link external. Specifi
 
 RULE: Optimize Environment
 
-- Extensions: ESLint/Prettier/GitLens/Thunder/Jest/Error Lens/Version Lens/GitHub PRs/Markdown/PHP Intelephense/WP-CLI; WP Snippets; Docker; Remote SSH; Bracket Pair.
-- Settings: .vscode/json formatOnSave true, quote single, autoSave delay, codeActions fixAll eslint/phpcs; WP debug true; indent 2; tab size 2; bracket color.
-- Tasks: tasks.json test/npm, wp-lint/shell; WP activate task; build zip; deploy task; clean cache.
-- Launch: launch.json Node React, Xdebug PHP; mySQL breakpoint; WP debug port; React hot reload; multi config.
-- Keybindings: json Ctrl+Shift+T test, Ctrl+G Git, Ctrl+Alt+W WP-CLI; save all; format doc; comment toggle; find symbol.
-- Workspace: extensions.json recommend. Remote-Containers WP; Docker compose; port forward; volume map; devcontainer.
-- ENFORCE: Shared .vscode no secrets. Configure on open; sync settings; backup config; migrate guide; validate setup.
+- Exts: ESLint/Prettier/GitLens/Thunder/Jest/Error Lens/Version Lens/GitHub PRs/Markdown/Intelephense/WP-CLI; WP Snippets; Docker/Remote SSH/Bracket Pair.
+- Settings: .vscode/json formatOnSave true, single quote, autoSave delay, fixAll eslint/phpcs; WP debug true; indent/tab 2; bracket color.
+- Tasks: tasks.json test/npm/wp-lint/shell; WP activate; build zip; deploy; cache clean.
+- Launch: launch.json Node React/Xdebug PHP; mySQL bp; WP debug port; React hot; multi.
+- Keybinds: json Ctrl+Shift+T test, Ctrl+G Git, Ctrl+Alt+W WP-CLI; save all; format doc; toggle comm; symbol find.
+- Workspace: extensions.json rec. Remote-Cont WP; Docker compose; port fwd; vol map; devcontainer.
+- ENFORCE: Shared .vscode no secrets. Open config; sync settings; backup; migrate guide; val setup.
 
-Specific: Update exts quarterly. General: Team config share; VS Code policy.
+Q ext update. Team share; policy.
+
+GUIDELINE: WP Themes Customize. WP color schemes; comment hook highlight; PHP/JS icons; team sync.
+
+RULE: Deep WP-CLI Tasks. Tasks wp plugin activate/db exp/imp/theme switch; F5 bind; panel log.
 
 ---
 
 ## AI Task Completion
 
-RULE: Reinforcement for Tasklist
+RULE: Tasklist Reinforcement
 
-Adhere/complete tasklist for deliverables. Use checklist. Specific: Check per response. General: Weekly self-audit; share with user.
+Adhere/complete for deliverables. Checklist. Per-resp check. Weekly audit; user share.
 
 Principles:
-- Holistic: Verify tasks pre-final. MD notes; mark done; share checklist; version checklist; archive complete.
-- No Skip: Mandatory. Issue if delay; priority high; due date; escalate; notify user.
-- Iterative: Audit post-step. Review query; log audit; metric track; improve; adjust plan.
-- Prompts: "Review: Architecture complete, Testing 98%, etc." Commit notes; timestamp; sign off; peer review; user confirm.
+- Holistic: Pre-final verify. MD notes; done mark; share/ver checklist; archive.
+- No Skip: Mand. Delay issue; high pri; due; esc/notify user.
+- Iterative: Post-step audit. Query rev; log/metric; improve/adjust.
+- Prompts: "Review: Arch complete, Test 98% etc." Commit notes; ts; signoff; peer/user confirm.
 
 Checklist:
-- [ ] Architecture: Layers/hooks separated; no direct queries; SOLID check; namespace all; layer map.
-- [ ] Naming: Patterns WP/PHP/React; prefix slug; consistent case; no abbr; lint names.
-- [ ] Language: Strict/types/styles; nonces in async; escapes all; capability check; validate lib.
-- [ ] Testing: 98%/18 organized; cache clear; flaky fixed; device test; trend up.
-- [ ] Docs: VERSION/CHANGELOG/README/inline; examples run; links valid; translate ready; coverage 90.
-- [ ] Versioning: Semantic WP; dep notices; lock commit; audit clean; policy doc.
-- [ ] Security: Secrets/validate/errors; OWASP check; scan pass; role test; rotation plan.
-- [ ] Performance: Resources/limits; transients use; index queries; bundle min; budget set.
-- [ ] VC: Commits/issues/branches; templates; signed commits; protect main; prune old.
-- [ ] Pre-commit: Linting/types/tests/scans; coverage gate; audit zero; secrets no; update hooks.
-- [ ] Workflow: Branch/PR/review/merge; staging verify; prod prep; release tag; retrospective.
-- [ ] Review: Checks performed; feedback addressed; approved 1+; changes test; metrics track.
-- [ ] Env: Isolated validated; Docker local; config diff; backup env; rotate creds.
-- [ ] Deps: Audited/pinned; weekly audit; update PR; compat test; source audit.
-- [ ] Monitoring: Endpoints/logging; alert test; log sample; metric dash; tune alerts.
-- [ ] Deploy: Checklist/rollback; blue-green; canary; post deploy test; incident plan.
-- [ ] VS Code: Exts/settings/tasks; keybinds; workspace sync; theme set; policy share.
-- [ ] Overall: Enhancements covered, errors fallbacks; WP multisite; user notice; perf baseline; user test.
+- [ ] Arch: Layers/hooks sep; no direct q; SOLID; namespace; map.
+- [ ] Naming: WP/PHP/React pat; slug prefix; case cons; no abbr; lint.
+- [ ] Lang: Strict/types/styles; async nonces; escapes; cap check; val lib.
+- [ ] Testing: 98%/18 org; cache clear; flaky fix; device; trend.
+- [ ] Docs: VER/CHANGELOG/README/inline; ex run; links; trans ready; 90 cov.
+- [ ] Vers: Sem WP; dep notice; lock commit; audit clean; pol doc.
+- [ ] Sec: Secrets/val/errs; OWASP; scan pass; role test; rotate plan.
+- [ ] Perf: Res/limits; transients; index q; bundle min; budget.
+- [ ] VC: Commits/issues/branches; templates; signed; protect main; prune.
+- [ ] Pre-commit: Lint/types/tests/scans; cov gate; audit zero; no secrets; hook update.
+- [ ] Workflow: Branch/PR/rev/merge; staging ver; prod prep; tag; retro.
+- [ ] Review: Checks; feedback addr; 1+ app; changes test; metrics.
+- [ ] Env: Isolated val; Docker local; config diff; backup; cred rotate.
+- [ ] Deps: Audit/pin; weekly; update PR; compat test; src audit.
+- [ ] Mon: Endpoints/log; alert test; sample; dash; tune.
+- [ ] Deploy: Checklist/rollback; blue-green; canary; post test; incident.
+- [ ] VS Code: Exts/settings/tasks; keybinds; sync; theme; pol share.
+- [ ] Overall: Enh cov, err fallbacks; multisite; user notice; perf base; user test.
 
-ENFORCE: Integrate response. Guide users. Loop 100%; flag incompletes; progress bar; auto complete; share audit.
+ENFORCE: Resp integrate. User guide. 100% loop; flag inc; progress bar; auto comp; audit share.
+
+GUIDELINE: Task Metrics Track. Time log/task; eff calc; bottlenecks ID; Q adjust; team dash share.
+
+RULE: Checklist Val Auto. Scripts verify items; PR int; flag inc; reports; 100% pre-merge enforce.
 
 ---
 
@@ -668,119 +810,141 @@ ENFORCE: Integrate response. Guide users. Loop 100%; flag incompletes; progress 
 
 RULE: Exhaustive Completion
 
-Completion is requirement for quality/reliability/professionalism. Partial undermines consistency/maintainability/security, leads to failures/debt/trust loss. Specific: 100% per PR. General: Audit annual; train new.
+Req for qual/reli/prof. Partial undercuts cons/maint/sec; fails/debt/trust loss. 100%/PR. Annual audit; new train.
 
 Why Essential:
-- Risk: Skips expose vulns/regressions/bottlenecks, breaches/downtime/losses. Completion identifies/resolves pre-prod; mySQL injections; nonce bypass; XSS risk; audit trail.
-- Scalability: Fragments code, complicates enhancements. Full modular/self-doc, reduces onboarding; WP updates easy; theme compat; multisite scale; extend API.
-- Compliance: Violates gates/reviews/audits. Full accountability/trace/versioning, prod-ready; WP.org approve; license check; GPL comply; legal review.
-- User: Expects seamless/secure/perf. Neglect frustrates/gaps. Full vets 18 categories, robust software; admin ease; mobile support; i18n ready; feedback loop.
-- Efficiency: Upfront min rework/debug/incidents. Tools automate, habit; CI time save; bug rate down; velocity up; ROI calc.
+- Risk: Skips vuln/reg/bottlenecks; breaches/downtime/loss. Completion pre-prod ID/res; mySQL inj; nonce bypass; XSS; audit.
+- Scalability: Frag code compl enh. Full mod/self-doc; onboarding red; WP update easy; theme compat; multisite; API extend.
+- Compliance: Viol gates/rev/audits. Full acc/trace/ver; prod-ready; WP.org app; license/GPL; legal.
+- User: Expects seamless/sec/perf. Neglect frust/gaps. Full 18 cats vet; robust; admin ease; mobile; i18n; feedback.
+- Efficiency: Upfront min rework/debug/inc. Tools/habit auto; CI save; bug down; vel up; ROI.
 
-ENFORCE: Contract. Deviate Issue/plan. Quarterly metrics success. 100% or mediocrity; track adherence; reward full; penalty partial; celebrate milestones.
+ENFORCE: Contract. Deviate issue/plan. Q metrics success. 100% or mediocrity; adherence track; full reward; partial pen; milestones celeb.
+
+GUIDELINE: Monthly Task Audits. Adherence rev; team interview; feedback adjust; improve doc; 95% aim.
+
+RULE: Tasks to Biz Value. ROI assign/task; high pri; value track; Q report; user align.
 
 ---
 
 ## Usage Guidelines
 
 ### Changes:
-- Checks lint/tests/type; WP-CLI run; coverage check; scan secrets; build verify.
-- Docs immediate; inline first; update pot; commit doc; examples add.
-- Naming/structure; prefix check; case verify; length limit; folder org.
-- Tests coverage; mock WP; run local; edge cases; mutate test.
-- Commits conventional; scope WP; body lines; footer notes; sign verify.
+- Lint/tests/type check; WP-CLI run; cov check; secrets scan; build verify.
+- Docs imm; inline first; pot update; doc commit; ex add.
+- Naming/struct; prefix check; case ver; len limit; folder org.
+- Tests cov; WP mock; local run; edges; mutate.
+- Commits conv; WP scope; body lines; footer notes; sign ver.
+
+GUIDELINE: Batch Changes Eff. Related group; batch test; unit rev; PR red; context maint.
 
 ### Submitting:
-- Tests pass; coverage 98; no flaky; all categories; parallel env.
-- No sensitive; scan commit; git secret; diff check; history clean.
-- Versions semantic; header update; lock bump; changelogs; compat note.
-- Docs complete; links work; build docs; FAQ add; video guide.
-- Staging validate; multisite; theme test; user sim; load sim.
+- Tests pass; 98 cov; no flaky; all cats; parallel env.
+- No sens; commit scan; git secret; diff check; hist clean.
+- Sem vers; header update; lock bump; changelogs; compat note.
+- Docs comp; links work; build; FAQ add; vid guide.
+- Staging val; multisite; theme test; user sim; load sim.
+
+RULE: E2E Val Submissions. Full E2E submit; screenshot diffs; no reg assert; fail block; auto retry.
 
 ### Projects:
-- Adapt domain; WP specific; post type; block support; shortcode opt.
-- Security/testing strict; nonces always; sanitize all; rate limit; audit log.
-- Docs consistent; PHPDoc all; JSDoc props; ADR update; glossary.
-- Errors/logging structured; WP_Error use; JSON log; alert chain; retention policy.
+- Domain adapt; WP spec; post type; block supp; shortcode opt.
+- Sec/test strict; always nonces; sanitize all; rate; audit log.
+- Docs cons; all PHPDoc/JSDoc props; ADR update; glossary.
+- Errs/log struct; WP_Error; JSON log; alert chain; retention pol.
+
+GUIDELINE: New Proj Scaffold. Yeoman WP gen; all folders; VS Code pre-config; val scaffold; domain custom.
 
 ### Times:
-- Follow rules; check section; daily read; quiz team; update rules.
-- Plan actions; list steps; timeline; risks id; milestone mark.
-- Logical process; sequence layers; dep order; parallel if; review plan.
-- Cover instances; multisite too; edge users; role vary; scale sim.
-- Errors/fallbacks; notices user; retry button; log user action; trace full.
-- Reference reinforcement conclude; checklist mark; sign off; archive complete; share learn.
+- Rules follow; section check; daily read; team quiz; rules update.
+- Plan acts; steps list; timeline; risks ID; milestone.
+- Logical proc; layer seq; dep order; parallel if; rev plan.
+- Instances cov; multisite; edge users; role vary; scale sim.
+- Errs/fallbacks; user notices; retry btn; user act log; full trace.
+- Ref reinforce conclude; checklist mark; signoff; archive; learn share.
+
+RULE: Time-Box Dev Tasks. 2h unit limits; overrun esc; time sinks track; proc opt; speed/qual balance.
 
 ### Debugging/Script
 
-RULE: Scripts for Debug/Resolve
+RULE: Debug/Resolve Scripts
 
-Generate scripts debug WP. Analyze bugs/common, code-complete solve. No script, manual. Add: Use WP-CLI in scripts; DB query script; hook list; log analyzer.
+Gen WP debug scripts. Analyze bugs/common; code-complete solve. No script manual. Include WP-CLI; DB q script; hook list; log analyzer.
 
 Force Scripts Prevent ?. Assignment
 
-TASK: Fix scripts ?. assignments React.
+TASK: Fix React ?. assignments.
 
 REQUIREMENTS:
-1. Search JS/TS transformers /assets/js/; grep pattern; file list; line highlight.
-2. Patterns ?. access; regex match; line num; context show.
-3. Non-distinguish read/write; AST parse; node inspect; type infer.
-4. Exclude assignments; node type check; comment code; branch cover.
-5. Validate no ?. LHS =/+=; AST check; unit test fix; lint rule; build test.
+1. Search JS/TS /assets/js/; grep pat; file list; line hl.
+2. ?. access pat; regex; line num; context.
+3. Read/write non-dist; AST parse; node insp; type infer.
+4. Exclude assigns; node type check; code comm; branch cov.
+5. Val no ?. LHS =/+=; AST check; unit fix test; lint rule; build test.
 
 PATTERNS:
-- obj.prop = value to obj?.prop = value (INCORRECT)
+- obj.prop = val to obj?.prop = val (INCORRECT)
 - obj.prop to obj?.prop read (CORRECT)
 
 DELIVERABLES:
-1. Fixes prevent; ESLint rule; doc update; test case; migrate old.
+1. Prevent fixes; ESLint rule; doc update; test case; old migrate.
 
-Focus: Prevent future; CI lint; PR check; scan tool.
+Focus: Future prevent; CI lint; PR check; scan tool.
+
+GUIDELINE: Debug Scripts Lib. /scripts/debug/; q analyzers; hook tracers; perf prof; usage doc; vers scripts.
+
+RULE: Auto Bug Repro. Min repro scripts; WP-CLI setup; vid record; repro repos share; fix verify repros.
 
 ---
 
 # Method for Augment AI VS Code WP
 
-Rules for VS Code WP repo interact. Thoughtful solve, clarify assumptions, collaborate user, best practices. Adhere, quality/understanding > speed.
+Rules VS Code WP repo interact. Thoughtful solve, clarify assumps, user collab, best prac. Adhere: qual/und > speed.
 
 ## Principles
-- Clarity: Understand context pre-changes. State/verify assumptions; list numbered; WP specific; cite file; update on new info.
-- Question: Ask targeted uncertainties, no guesses; 1-3 max; follow up; clarify term; prioritize Qs.
-- Incremental: Small/testable, code move/refactor; one file first; commit per; revert easy; test each.
-- Collaboration: Partner, pause decisions, no brute; confirm plan; alt propose; user lead; co-decide.
-- Reflection: Identify blocker, propose Qs/alts; list options; prioritize; time box; doc lesson.
+- Clarity: Context pre-changes und. State/ver assumps; num list; WP spec; file cite; new info update.
+- Question: Target uncerts; no guess; max 1-3; follow; term clarify; pri Qs.
+- Incremental: Small/testable; code move/ref; 1 file first; per commit; easy revert; each test.
+- Collaboration: Partner; pause dec; no brute; plan confirm; alt prop; user lead; co-dec.
+- Reflection: Blocker ID; Qs/alts prop; opt list; pri; time box; lesson doc.
+
+GUIDELINE: Assumps Doc Explicit. assumptions.md ded; per-int update; pre-code rev; user val share.
 
 ## Rules
 1. Analysis:
-   - Scan structure deps/modules patterns pre-suggest; note WP dirs; dep tree; size est; compat check.
-   - Unclear? Ask: "Files React/PHP WP; clarify framework?" List key files; purpose query; goal align; constraint list.
+   - Pre-suggest scan struct/deps/mods/pats; WP dirs note; dep tree; size est; compat check.
+   - Unclear? Ask: "React/PHP WP files; framework clarify?" Key files list; purpose Q; goal align; constraints.
 
 2. Movement/Refactor:
-   - Outline impact: "Move hook affects 3 files; verify?" List files; risk list; cost benefit; test plan.
-   - No large no approval. Plan ask: "Align goals?" Steps numbered; time est; fallback; milestone.
+   - Impact outline: "Hook move 3 files affect; verify?" Files list; risk; cost/ben; test plan.
+   - No large sans app. Plan ask: "Goals align?" Num steps; time est; fallback; milestone.
 
 3. Assumption:
-   - List start response: "Assumptions: (1) /v1/users; (2) errorHandler." Bold key; source cite; confidence level; impact if wrong.
-   - Q each: " (1) accurate, check config?" Suggest verify; default if no; update list; confirm all.
+   - Resp start list: "Assumps: (1) /v1/users; (2) errorHandler." Bold key; cite src; conf level; wrong impact.
+   - Q each: "(1) acc, config check?" Ver suggest; no default; list update; all confirm.
 
 4. Questioning:
-   - Ambiguity: Pause 1-3 Qs; specific WP; closed/open mix; why/how; user impact.
-   - Examples: "Goal perf/read?" "5 files; compat?" "Resolve type; details hook?" Edge mySQL; user role; scale impact; alt cost.
-   - Suggest post-answer; no code til clear; confirm answer; summarize; next Q if; chain Qs.
+   - Amb: Pause 1-3 Qs; WP spec; closed/open mix; why/how; user impact.
+   - Ex: "Perf/read goal?" "5 files; compat?" "Type resolve; hook details?" mySQL edge; role; scale; alt cost.
+   - Post-ans suggest; no code til clear; ans confirm; sum; next Q chain.
 
 5. Workflow:
-   - Assess: Describe confirm: "Asking [task]; correct?" WP restate; goal align; scope bound; success measure.
-   - Plan: High-level risks: "Risk deps; mitigate?" Bullet risks; tools list; milestones; resource need.
-   - Execute: One change, test terminal, feedback: "Diff; npm test results?" Run command; expected out; diff show; verify user.
-   - Iterate: Explain fail pivot: "Failed [ ]; explore [ ]?" Why brief; lesson note; retry count; adjust plan.
+   - Assess: Confirm desc: "[task] asking; correct?" WP restate; goal align; scope; success meas.
+   - Plan: High risks: "Deps risk; mitigate?" Bullet risks; tools; milestones; res need.
+   - Execute: 1 change; term test; feedback: "Diff; npm test?" Cmd run; exp out; diff; user ver.
+   - Iterate: Fail explain pivot: "Failed [ ]; explore [ ]?" Why brief; lesson; retry cnt; plan adjust.
 
 6. Pitfalls:
-   - Concise thorough; under 200 words; bullet if list; bold key; user focus.
-   - Ask > assume; 1+ Q unless clear; unless trivial; log Qs; Q count; follow-through.
-   - Override speed: Quality > Velocity; log override; balance time; user time; estimate effort.
+   - Concise thorough; <200w; bullet list; bold key; user focus.
+   - Ask > assume; 1+ Q unless clear/trivial; log Qs; cnt; follow.
+   - Speed override: Qual > Vel; log override; time balance; user time; effort est.
+
+RULE: Collab Enhance Live Share. VS Code Live real-time pair; term share; co-edit docs; opt record; shared art rev.
 
 ## Enforcement/Log
-- Log Qs/assumps "Augment AI Log" channel; timestamp, export option(s), and filter log(s); search by date/user.
-- Violate flag: "Proceeded no full—review"; suggest fix, self correct, learn from, and report incident.
+- Log Qs/assumps "Augment AI Log" chan; ts; export opt; filter; date/user search.
+- Viol flag: "Pro no full—review"; fix suggest; self corr; learn; incident report.
 
-Follow rules, human-like WP dev VS Code; iterate method; feedback loop; continuous improve.
+Rules follow, human-like WP dev VS Code; method iterate; feedback loop; cont improve.
+
+GUIDELINE: Method Eff Q Rev. User survey clarity/speed; rules adjust; changes doc; metrics track; wins celeb.
