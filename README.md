@@ -5,7 +5,7 @@ Augment AI Rules and Guidelines for WordPress Plugin Development
 
 ---
 type: "always_apply"
-description: "VS Code Development for WordPress Plugins"
+description: "Example description"
 ---
 
 # Augment AI Rules & User Guidelines – VS Code Development for WordPress Plugins
@@ -21,7 +21,7 @@ RULE: Decoupled Server-Client Model with WordPress Plugin Server and PWA Client
 The application server operates as a WordPress plugin installed on a standard WordPress host, handling backend logic, mySQL interactions, and exposing APIs via WP REST API extensions. The client is a Progressive Web App (PWA) built with React, which connects to the WordPress host over HTTPS for data fetching, updates, and authentication. This architecture promotes separation of concerns, enables offline functionality, and supports seamless installation on user devices. Specific: Ensure plugin exposes all necessary endpoints under /wp-json/augment/v1/; PWA must register service worker on load. General: Audit API compatibility quarterly; document connection flows in README; test PWA install prompts across browsers.
 
 #### Key Principles
-- Server as Plugin: Leverage WP core for authentication (JWT or WP sessions), scheduling (WP cron), and security (nonces). Prefix all custom tables, hooks, and endpoints with '**augment_**' (TBD for Application); migrate schemas on plugin activation; handle WP updates gracefully with version checks.
+- Server as Plugin: Leverage WP core for authentication (JWT or WP sessions), scheduling (WP cron), and security (nonces). Prefix all custom tables, hooks, and endpoints with 'augment_'; migrate schemas on plugin activation; handle WP updates gracefully with version checks.
 - Client as PWA: Use React for UI, Workbox for service workers, and IndexedDB for local storage. Manifest.json defines app metadata; support add-to-homescreen; offline-first design with sync queues. Connect via fetch to WP REST; use WP API client libraries like @wordpress/api-fetch.
 - Connection Mechanism: Secure HTTPS only; OAuth2 or WP application passwords for auth; retry logic on network failures; heartbeat pings for session validity; compress payloads with GZIP.
 - Avoid: Tight coupling like embedding WP scripts in PWA; direct mySQL access from client; unversioned APIs; ignoring PWA lighthouse scores.
@@ -182,7 +182,7 @@ GUIDELINE: Property-Based Units. Random inputs via Hypothesis PHP; assert invari
    - Full stack React-PHP-mySQL.
    - Multisite/workflows.
    - Ex: React checkout to email.
-   - Include: WP-CLI setup; video; journeys; assert email.
+   - Include: WP-CLI setup; video; journeys; assert email. Utilize Playwright for headless browser automation to simulate realistic user interactions, navigate WP admin dashboards, interact with React components, and verify end-to-end data flow from PWA client to PHP backend and mySQL storage, ensuring cross-browser consistency in Chrome, Firefox, and Safari.
 
 4. System Tests
    - Plugin WP env, health/resources.
@@ -222,13 +222,13 @@ GUIDELINE: Property-Based Units. Random inputs via Hypothesis PHP; assert invari
     - WP vers/themes/plugins/browsers/devices.
     - Backward/forward.
     - Ex: React WP 6.0+ browsers.
-    - Include: Gutenberg; mobile; plugin matrix; theme switch.
+    - Include: Gutenberg; mobile; plugin matrix; theme switch. Leverage Playwright's multi-browser support for automated compatibility testing across desktop and mobile viewports, simulating device-specific interactions and verifying PWA responsiveness without manual intervention.
 
 11. Accessibility Tests
     - WCAG/ADA React/PHP.
     - Scans/audits.
     - Ex: Screen readers forms.
-    - Include: focus order; contrast; WAVE; keyboard nav.
+    - Include: focus order; contrast; WAVE; keyboard nav. Integrate Playwright with accessibility plugins like axe-core to perform automated a11y audits during E2E tests, checking for ARIA compliance, keyboard navigation paths, and screen reader compatibility in headless mode.
 
 12. Exploratory Tests
     - Unstructured probes.
@@ -272,16 +272,16 @@ GUIDELINE: Property-Based Units. Random inputs via Hypothesis PHP; assert invari
     - Ex: Malformed import reject.
     - Include: backup/restore; charset; dup detect; constraints.
 
-RULE: Expand to 20 Cats w/ Visual/Network. Visual reg Percy; net intercept Cypress; UI theme consistency; slow net sim.
+RULE: Expand to 20 Cats w/ Visual/Network. Visual reg Percy; net intercept Cypress; UI theme consistency; slow net sim. Incorporate Playwright for visual regression testing by capturing screenshots at key UI states during E2E flows and comparing against baselines to detect unintended changes in React admin interfaces across WP themes.
 
 ENFORCE:
 - Merge Gates: No int w/o 98% peer tests. SonarQube/Codecov; block low; approve delta.
 - Critical: BVT/E2E/Reg/Sec + Perf/Rec for auth/trans; manual critical; signoff; risk.
 - CI/CD: GitHub Actions/WP-CLI auto, parallel, flaky alerts, approvals; 3x retry; artifacts; parallel envs.
 - Vigilance: Q audits, TDD/BDD, dashes; gap reports; train; goal 99.
-- Add: PHP 8.1+; BrowserStack; device lab; WP nightly.
+- Add: PHP 8.1+; BrowserStack; device lab; WP nightly. Configure Playwright in CI pipelines to run parallel browser instances for comprehensive E2E and compatibility test coverage, integrating with WP-CLI for automated site provisioning and teardown.
 
-VS Code: Test Explorer (PHPUnit/Jest). tasks.json coverage. Codecov badges; save run; debug; sidebar; inline. Test Runner UI visuals; coverage gutters.
+VS Code: Test Explorer (PHPUnit/Jest). tasks.json coverage. Codecov badges; save run; debug; sidebar; inline. Test Runner UI visuals; coverage gutters. Install Playwright VS Code extension for seamless test authoring, debugging, and execution within the editor, enabling trace viewer for failed E2E scenarios and codegen for rapid test script creation.
 
 ---
 
@@ -293,11 +293,11 @@ Tests like src. AAA: Arrange, Act, Assert. AAA all. Colocate; naming conv.
 
 - Unit: /tests/unit/ mirror (userService.test.php); WP mocks; per-file cov; group asserts; types.
 - Integration: /tests/integration/ subsystems (ajax/); shared DB; env vars; DB teardown; cleanup.
-- E2E: /tests/e2e/ journeys (admin-flow/); page objs selectors; wait load; screenshot fail; email assert.
+- E2E: /tests/e2e/ journeys (admin-flow/); page objs selectors; wait load; screenshot fail; email assert. Employ Playwright for scripting these tests, defining page object models for reusable locators in React components, handling dynamic WP nonces via network interception, and asserting on API responses and UI states in headless or headed modes as needed for different modules like admin dashboards and PWA install flows.
 - Utilities: /tests/utils/ mocks/factories; fake gens; seeder; config fakes; shared setup.
 - Fixtures: /tests/fixtures/ (sample-users.sql); schema vers; import/clean scripts; data gen.
 
-PATTERN: Per-file tests. Names: shouldReturnProfileValidId; desc scenario; given/when/then; ID.
+PATTERN: Per-file tests. Names: shouldReturnProfileValidId; describe/it; data tables; nested desc; skip known; tags.
 
 Practices:
 - Naming: <module>.test.<ext>, describe/it; data tables; nested desc; skip known; tags.
@@ -320,7 +320,7 @@ Clear Jest cache pre-runs consistency. Clear before suite. Doc process.
 
 ENFORCE: README doc. Merge gate; pkg script; warn not; lint enforce. Daily clear. Train; monitor size.
 
-VS Code: Test search/symbols. Debugger bps. Testing watch. Clear tasks; keybind run; cov view; config; groups. Watch toggle iterative.
+VS Code: Test search/symbols. Debugger bps. Testing watch. Clear tasks; keybind run; cov view; config; groups. Watch toggle iterative. Use Playwright Test extension to run and debug E2E tests directly in VS Code, with integrated trace inspection and browser launch for interactive troubleshooting of module-specific failures.
 
 RULE: Contract Testing APIs. Consumer contracts; Pact val; indep WP REST; backward compat; CI auto.
 
@@ -572,7 +572,7 @@ Guidelines:
 - Format: Sum/Changes/Test/Rationale/Next; risks; related PRs; dep PR; story.
 - ENFORCE: No direct push. Approvals. Actions checks. Checklists ref; rebase opt; squash def; msg; PR timeout.
 
-VS Code: GitLens hist/blame. GitHub PR/merge; inline rev; thread res; draft. Auto draft. Rev guidelines; bot.
+VS Code: GitLens hist/blame. GitHub PR/merge; inline rev; thread res; emoji; suggest. Checklist. Metrics; peer swap.
 
 GUIDELINE: Merge Queues Safety. GitHub queue PRs; queue CI; fail rollback; delay notify; size <=5.
 
